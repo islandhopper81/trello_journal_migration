@@ -1,0 +1,15 @@
+{
+  "trello": {
+    "apiKey": "YOUR_TRELLO_API_KEY",
+    "apiToken": "YOUR_TRELLO_API_TOKEN",
+    "boardId": "YOUR_BOARD_ID"
+  },
+  "dayone": {
+    "journalName": "Journal"
+  },
+  "options": {
+    "includeArchived": false,
+    "includeAttachments": true,
+    "listFilter": []
+  }
+}

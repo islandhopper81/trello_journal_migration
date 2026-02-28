@@ -1,0 +1,11 @@
+.git
+.devcontainer
+.gitignore
+__pycache__
+*.pyc
+output/
+config.json
+.venv
+venv
+.DS_Store
+README.md
