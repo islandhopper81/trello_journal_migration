@@ -79,12 +79,16 @@ class TrelloClient:
         """
         os.makedirs(os.path.dirname(save_to), exist_ok=True)
 
-        # Trello-hosted URLs require key/token auth; S3/CDN pre-signed URLs
-        # already embed credentials in the URL and reject extra query params.
+        # Trello-hosted URLs require auth via Authorization header; S3/CDN
+        # pre-signed URLs already embed credentials and don't need extra headers.
         parsed = urlparse(url)
-        auth_params = self._auth_params if parsed.netloc.endswith("trello.com") else {}
+        headers = {}
+        if parsed.netloc.endswith("trello.com"):
+            key = self._auth_params["key"]
+            token = self._auth_params["token"]
+            headers["Authorization"] = f'OAuth oauth_consumer_key="{key}", oauth_token="{token}"'
 
-        response = requests.get(url, params=auth_params, timeout=60, stream=True)
+        response = requests.get(url, headers=headers, timeout=60, stream=True)
         response.raise_for_status()
 
         with open(save_to, "wb") as download_file:
