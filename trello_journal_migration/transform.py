@@ -26,20 +26,17 @@ from .dayone import create_entry
 ATTACHMENT_PLACEHOLDER = "{{ATTACHMENT_%d}}"
 
 
-def parse_trello_date(date_string: Optional[str]) -> str:
+def parse_trello_date(date_string: str) -> str:
     """
     Convert a Trello date string to ISO 8601 format.
-    Returns the current time if the input is missing or unparseable.
+    Raises ValueError if the string is missing or cannot be parsed.
     """
-    if not date_string:
-        return datetime.now(timezone.utc).isoformat()
-
     # Trello uses ISO 8601 with "Z" suffix — normalize to "+00:00" for fromisoformat()
     try:
         parsed = datetime.fromisoformat(date_string.replace("Z", "+00:00"))
         return parsed.isoformat()
-    except ValueError:
-        return datetime.now(timezone.utc).isoformat()
+    except (ValueError, AttributeError):
+        raise ValueError(f"Unparseable Trello date: {date_string!r}")
 
 
 def build_entry_body(card: dict, include_attachments: bool = True) -> str:
@@ -123,8 +120,14 @@ def card_to_entry(
 
     # Prefer the due date for creation; fall back to last activity
     raw_creation_date = card.get("due") or card.get("dateLastActivity")
+    if not raw_creation_date:
+        raise ValueError(f"Card {card['name']!r} has no due date or dateLastActivity")
     creation_date = parse_trello_date(raw_creation_date)
-    modified_date = parse_trello_date(card.get("dateLastActivity"))
+
+    raw_modified_date = card.get("dateLastActivity")
+    if not raw_modified_date:
+        raise ValueError(f"Card {card['name']!r} has no dateLastActivity")
+    modified_date = parse_trello_date(raw_modified_date)
 
     # Collect local paths of downloaded attachments (in order matching placeholders)
     attachment_paths = []
@@ -144,6 +147,43 @@ def card_to_entry(
     )
     entry["attachment_paths"] = attachment_paths
     return entry
+
+
+def validate_cards(cards: list) -> list[str]:
+    """
+    Check all cards for problems that would cause the migration to fail.
+
+    Returns a list of human-readable error strings. An empty list means all
+    cards passed validation. Call this before downloading anything so you get
+    a complete picture of what needs fixing rather than failing on the first
+    bad card mid-run.
+    """
+    errors = []
+
+    for card in cards:
+        name = card.get("name", "<unnamed>")
+        list_name = card.get("listName", "")
+        label = f"{list_name}/{name}"
+
+        raw_creation_date = card.get("due") or card.get("dateLastActivity")
+        if not raw_creation_date:
+            errors.append(f"[{label}] No due date or dateLastActivity")
+        else:
+            try:
+                parse_trello_date(raw_creation_date)
+            except ValueError as exc:
+                errors.append(f"[{label}] Bad creation date — {exc}")
+
+        raw_modified_date = card.get("dateLastActivity")
+        if not raw_modified_date:
+            errors.append(f"[{label}] No dateLastActivity")
+        else:
+            try:
+                parse_trello_date(raw_modified_date)
+            except ValueError as exc:
+                errors.append(f"[{label}] Bad modified date — {exc}")
+
+    return errors
 
 
 def transform_cards(

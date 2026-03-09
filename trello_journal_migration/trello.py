@@ -2,6 +2,7 @@
 
 import os
 from typing import Optional
+from urllib.parse import urlparse
 
 import requests
 
@@ -78,7 +79,12 @@ class TrelloClient:
         """
         os.makedirs(os.path.dirname(save_to), exist_ok=True)
 
-        response = requests.get(url, params=self._auth_params, timeout=60, stream=True)
+        # Trello-hosted URLs require key/token auth; S3/CDN pre-signed URLs
+        # already embed credentials in the URL and reject extra query params.
+        parsed = urlparse(url)
+        auth_params = self._auth_params if parsed.netloc.endswith("trello.com") else {}
+
+        response = requests.get(url, params=auth_params, timeout=60, stream=True)
         response.raise_for_status()
 
         with open(save_to, "wb") as download_file:

@@ -10,10 +10,11 @@ Usage:
 import argparse
 import json
 import os
+import re
 import sys
 
 from .trello import TrelloClient
-from .transform import transform_cards
+from .transform import transform_cards, validate_cards
 from .dayone import write_dayone_zip
 
 
@@ -28,6 +29,14 @@ def load_config(path: str) -> dict:
         sys.exit(1)
 
 
+def sanitize_filename(name: str) -> str:
+    """Strip characters that are illegal in Windows filenames."""
+    sanitized = re.sub(r'[<>:"/\\|?*]', "_", name)
+    # Windows disallows trailing spaces or dots
+    sanitized = sanitized.strip(". ")
+    return sanitized or "_"
+
+
 def download_attachments(client: TrelloClient, cards: list, download_dir: str) -> int:
     """
     Download all attachments from the given cards into download_dir.
@@ -36,9 +45,13 @@ def download_attachments(client: TrelloClient, cards: list, download_dir: str) -
     The attachment dicts on each card are updated in-place with a "local_path"
     key pointing to the downloaded file.
 
+    Raises RuntimeError at the end if any downloads failed, listing every
+    failure so you can decide whether to retry or skip those cards.
+
     Returns the total number of files downloaded.
     """
     total_downloaded = 0
+    failures = []
 
     for card in cards:
         attachments = card.get("attachments") or []
@@ -52,7 +65,8 @@ def download_attachments(client: TrelloClient, cards: list, download_dir: str) -
             if not url:
                 continue
 
-            filename = attachment.get("name") or os.path.basename(url)
+            raw_name = attachment.get("name") or os.path.basename(url.split("?")[0])
+            filename = sanitize_filename(raw_name)
             save_path = os.path.join(card_folder, filename)
 
             try:
@@ -61,7 +75,13 @@ def download_attachments(client: TrelloClient, cards: list, download_dir: str) -
                 total_downloaded += 1
                 print(f"  Downloaded: {filename}")
             except Exception as err:
-                print(f"  Failed to download {filename}: {err}")
+                failures.append(f"  {card['name']!r} — {filename}: {err}")
+                print(f"  FAILED: {filename}: {err}")
+
+    if failures:
+        raise RuntimeError(
+            f"{len(failures)} attachment(s) failed to download:\n" + "\n".join(failures)
+        )
 
     return total_downloaded
 
@@ -99,6 +119,16 @@ def main() -> None:
         include_archived=options.get("includeArchived", False),
     )
     print(f"Found {len(lists)} lists, {len(cards)} cards")
+
+    # -- Pre-flight validation: check all cards before touching the filesystem --
+    print("\nValidating cards...")
+    validation_errors = validate_cards(cards)
+    if validation_errors:
+        print(f"\nFound {len(validation_errors)} problem(s) — fix these before running:\n")
+        for error in validation_errors:
+            print(f"  {error}")
+        sys.exit(1)
+    print(f"All {len(cards)} cards passed validation.")
 
     # -- Download attachments --
     include_attachments = options.get("includeAttachments", True)
