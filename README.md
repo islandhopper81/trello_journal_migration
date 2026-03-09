@@ -66,6 +66,33 @@ To import:
 
 Attachments are fully embedded in the zip and will appear inline in your journal entries.
 
+## Error handling
+
+### Validation
+
+Before downloading anything, the tool validates every card on the board. If any cards have missing or unparseable dates, the run stops and prints a complete list of problems:
+
+```
+Found 2 problem(s) — fix these before running:
+
+  [My List/Some Card] No due date or dateLastActivity
+  [My List/Other Card] Bad creation date — Unparseable Trello date: 'not-a-date'
+```
+
+Fix the flagged cards in Trello, then re-run.
+
+### Attachment download failures
+
+If one or more attachments fail to download, the run aborts after attempting all downloads and prints every failure:
+
+```
+RuntimeError: 2 attachment(s) failed to download:
+  'Card Name' — photo.jpg: 403 Client Error: Forbidden
+  'Other Card' — file.pdf: ConnectionError: ...
+```
+
+The entries themselves are not written until all attachments succeed. Re-run once the failures are resolved, or set `options.includeAttachments` to `false` to skip attachments entirely.
+
 ## Configuration
 
 | Field | Description |
