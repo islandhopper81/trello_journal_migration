@@ -59,6 +59,21 @@ def build_entry_body(card: dict, include_attachments: bool = True) -> str:
         lines.append(description)
         lines.append("")
 
+    # Comments (actions of type commentCard), oldest first
+    comments = [
+        a for a in (card.get("actions") or [])
+        if a.get("type") == "commentCard"
+    ]
+    comments.sort(key=lambda a: a.get("date", ""))
+    if comments:
+        lines.append("## Comments")
+        lines.append("")
+        for comment in comments:
+            text = (comment.get("data") or {}).get("text", "").strip()
+            if text:
+                lines.append(text)
+                lines.append("")
+
     # Attachments
     attachments = card.get("attachments") or []
     if include_attachments and attachments:

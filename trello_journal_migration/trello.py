@@ -44,6 +44,8 @@ class TrelloClient:
                 "fields": "name,desc,dateLastActivity,due,labels,closed",
                 "attachments": "true",
                 "attachment_fields": "name,url,mimeType,date",
+                "actions": "commentCard",
+                "action_fields": "data,date",
             },
         )
 

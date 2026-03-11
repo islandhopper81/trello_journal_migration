@@ -60,13 +60,13 @@ def download_attachments(client: TrelloClient, cards: list, download_dir: str) -
 
         card_folder = os.path.join(download_dir, card["id"])
 
-        for attachment in attachments:
+        for index, attachment in enumerate(attachments):
             url = attachment.get("url")
             if not url:
                 continue
 
             raw_name = attachment.get("name") or os.path.basename(url.split("?")[0])
-            filename = sanitize_filename(raw_name)
+            filename = f"{index}_{sanitize_filename(raw_name)}"
             save_path = os.path.join(card_folder, filename)
 
             try:
