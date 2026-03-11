@@ -66,8 +66,6 @@ def build_entry_body(card: dict, include_attachments: bool = True) -> str:
     ]
     comments.sort(key=lambda a: a.get("date", ""))
     if comments:
-        lines.append("## Comments")
-        lines.append("")
         for comment in comments:
             text = (comment.get("data") or {}).get("text", "").strip()
             if text:

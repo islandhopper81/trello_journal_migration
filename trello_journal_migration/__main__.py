@@ -155,6 +155,14 @@ def main() -> None:
         print(f"Would create {len(entries)} Day One entries.")
         attachment_count = sum(len(e.get("attachment_paths", [])) for e in entries)
         print(f"Total attachments: {attachment_count}")
+        multi_comment_cards = [
+            c for c in cards
+            if len([a for a in (c.get("actions") or []) if a.get("type") == "commentCard"]) > 1
+        ]
+        print(f"Cards with more than one comment: {len(multi_comment_cards)}")
+        for card in multi_comment_cards:
+            comment_count = len([a for a in card["actions"] if a.get("type") == "commentCard"])
+            print(f"  [{card.get('listName', '')}] {card['name']} — {comment_count} comments")
         if entries:
             print("\nSample entry:")
             print(json.dumps(entries[0], indent=2))
