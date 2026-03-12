@@ -44,10 +44,28 @@ class TrelloClient:
                 "fields": "name,desc,dateLastActivity,due,labels,closed",
                 "attachments": "true",
                 "attachment_fields": "name,url,mimeType,date",
-                "actions": "commentCard",
-                "action_fields": "data,date",
             },
         )
+
+    def get_card_comments(self, board_id: str) -> dict:
+        """
+        Fetch all comment actions for a board in one request.
+
+        Returns a dict mapping card_id -> list of comment actions,
+        sorted oldest-first.
+        """
+        actions = self._get(
+            f"/boards/{board_id}/actions",
+            {"filter": "commentCard", "fields": "data,date", "limit": 1000},
+        )
+        comments_by_card = {}
+        for action in actions:
+            card_id = (action.get("data") or {}).get("card", {}).get("id")
+            if card_id:
+                comments_by_card.setdefault(card_id, []).append(action)
+        for comments in comments_by_card.values():
+            comments.sort(key=lambda a: a.get("date", ""))
+        return comments_by_card
 
     def get_all_cards_on_board(self, board_id: str, include_archived: bool = False):
         """
@@ -58,6 +76,7 @@ class TrelloClient:
         came from.
         """
         lists = self.get_lists(board_id, include_archived=include_archived)
+        comments_by_card = self.get_card_comments(board_id)
         all_cards = []
 
         for trello_list in lists:
@@ -66,6 +85,7 @@ class TrelloClient:
             for card in cards:
                 card["listName"] = trello_list["name"]
                 card["listId"] = trello_list["id"]
+                card["actions"] = comments_by_card.get(card["id"], [])
                 all_cards.append(card)
 
         return lists, all_cards
