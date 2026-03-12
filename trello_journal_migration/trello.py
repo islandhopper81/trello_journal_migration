@@ -56,7 +56,7 @@ class TrelloClient:
         """
         actions = self._get(
             f"/boards/{board_id}/actions",
-            {"filter": "commentCard", "fields": "data,date", "limit": 1000},
+            {"filter": "commentCard", "fields": "type,data,date", "limit": 1000},
         )
         comments_by_card = {}
         for action in actions:
