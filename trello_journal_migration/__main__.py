@@ -14,7 +14,7 @@ import re
 import sys
 
 from .trello import TrelloClient
-from .transform import transform_cards, validate_cards
+from .transform import transform_cards, validate_cards, filter_empty_cards
 from .dayone import write_dayone_zip
 
 
@@ -94,6 +94,8 @@ def main() -> None:
     parser.add_argument("--config", default="config.json", help="Path to config file")
     parser.add_argument("--dry-run", action="store_true", help="Preview without writing output")
     parser.add_argument("--output-dir", default="output", help="Output directory")
+    parser.add_argument("--limit", type=int, default=0, help="Only process the first N cards (0 = all)")
+    parser.add_argument("--card", default="", help="Only process cards whose name contains this string (case-insensitive)")
     args = parser.parse_args()
 
     # -- Load config --
@@ -119,6 +121,18 @@ def main() -> None:
         include_archived=options.get("includeArchived", False),
     )
     print(f"Found {len(lists)} lists, {len(cards)} cards")
+
+    # -- Optional test filters --
+    if args.card:
+        cards = [c for c in cards if args.card.lower() in c.get("name", "").lower()]
+        print(f"Filtered to {len(cards)} card(s) matching {args.card!r}")
+    if args.limit:
+        cards = cards[:args.limit]
+        print(f"Limited to first {len(cards)} card(s)")
+
+    # -- Filter empty cards --
+    cards, skipped_cards = filter_empty_cards(cards)
+    print(f"Skipping {len(skipped_cards)} empty card(s), processing {len(cards)} card(s)")
 
     # -- Pre-flight validation: check all cards before touching the filesystem --
     print("\nValidating cards...")
@@ -155,14 +169,23 @@ def main() -> None:
         print(f"Would create {len(entries)} Day One entries.")
         attachment_count = sum(len(e.get("attachment_paths", [])) for e in entries)
         print(f"Total attachments: {attachment_count}")
-        multi_comment_cards = [
+        cards_with_comments = [
             c for c in cards
-            if len([a for a in (c.get("actions") or []) if a.get("type") == "commentCard"]) > 1
+            if len([a for a in (c.get("actions") or []) if a.get("type") == "commentCard"]) > 0
         ]
-        print(f"Cards with more than one comment: {len(multi_comment_cards)}")
-        for card in multi_comment_cards:
+        print(f"Cards with comments: {len(cards_with_comments)}")
+        for card in cards_with_comments:
             comment_count = len([a for a in card["actions"] if a.get("type") == "commentCard"])
-            print(f"  [{card.get('listName', '')}] {card['name']} — {comment_count} comments")
+            print(f"  [{card.get('listName', '')}] {card['name']} — {comment_count} comment(s)")
+        multi_comment_cards = [c for c in cards_with_comments if
+            len([a for a in c["actions"] if a.get("type") == "commentCard"]) > 1]
+        print(f"Cards with more than one comment: {len(multi_comment_cards)}")
+        print(f"\nSkipped cards (no description, comments, or attachments):")
+        for card in skipped_cards:
+            print(f"  [{card.get('listName', '')}] {card['name']}")
+        print("\nCard names (to review date formats):")
+        for card in cards:
+            print(f"  [{card.get('listName', '')}] {card['name']}")
         if entries:
             print("\nSample entry:")
             print(json.dumps(entries[0], indent=2))

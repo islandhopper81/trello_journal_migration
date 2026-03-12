@@ -17,6 +17,7 @@ Attachment handling:
     when it builds the photos array and knows the identifiers.
 """
 
+import re
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -24,6 +25,58 @@ from .dayone import create_entry
 
 # Placeholder format used in entry text, replaced during zip packaging
 ATTACHMENT_PLACEHOLDER = "{{ATTACHMENT_%d}}"
+
+_DATE_FORMATS_WITH_YEAR = ["%b %d, %Y", "%B %d, %Y"]
+_DATE_FORMATS_WITHOUT_YEAR = ["%b %d", "%B %d"]
+
+
+def parse_date_from_name(card_name: str, list_name: str = "") -> tuple[Optional[str], Optional[str]]:
+    """
+    Try to parse a journal date from a card name like "Mar 29, 2020" or "April 3".
+
+    Handles:
+      - Full and abbreviated month names (March / Mar)
+      - Missing year — inferred from list_name if it's a 4-digit year
+      - "Sept" abbreviation — normalized to "Sep"
+      - Missing space between month and day (e.g. "Nov21")
+      - Parenthetical notes (e.g. "(Tommy's Birthday)") — stripped
+      - Year mismatch with list name — flagged as a warning
+
+    Returns (iso_date_string, warning_message). Either value may be None.
+    Date is set to noon UTC to avoid day-boundary issues across timezones.
+    """
+    # Strip parenthetical notes
+    name = re.sub(r'\s*\(.*?\)', '', card_name).strip()
+    # Normalize "Sept" -> "Sep"
+    name = re.sub(r'\bSept\b', 'Sep', name, flags=re.IGNORECASE)
+    # Insert missing space between month letters and day digits (e.g. "Nov21")
+    name = re.sub(r'([A-Za-z])(\d)', r'\1 \2', name)
+
+    list_year = int(list_name.strip()) if list_name.strip().isdigit() and len(list_name.strip()) == 4 else None
+
+    # Try formats that include a year
+    for fmt in _DATE_FORMATS_WITH_YEAR:
+        try:
+            parsed = datetime.strptime(name, fmt)
+            date_str = parsed.replace(hour=12, tzinfo=timezone.utc).isoformat()
+            warning = None
+            if list_year and parsed.year != list_year:
+                warning = f"Year mismatch: card name says {parsed.year} but list is [{list_year}]"
+            return date_str, warning
+        except ValueError:
+            continue
+
+    # Try formats without a year — infer from list name
+    if list_year:
+        for fmt in _DATE_FORMATS_WITHOUT_YEAR:
+            try:
+                parsed = datetime.strptime(name, fmt)
+                date_str = parsed.replace(year=list_year, hour=12, tzinfo=timezone.utc).isoformat()
+                return date_str, None
+            except ValueError:
+                continue
+
+    return None, f"Could not parse date from card name: {card_name!r}"
 
 
 def parse_trello_date(date_string: str) -> str:
@@ -131,11 +184,20 @@ def card_to_entry(
     body = build_entry_body(card, include_attachments=include_attachments)
     tags = collect_tags(card)
 
-    # Prefer the due date for creation; fall back to last activity
-    raw_creation_date = card.get("due") or card.get("dateLastActivity")
-    if not raw_creation_date:
-        raise ValueError(f"Card {card['name']!r} has no due date or dateLastActivity")
-    creation_date = parse_trello_date(raw_creation_date)
+    # Try to parse the creation date from the card name first
+    name_date, name_warning = parse_date_from_name(
+        card.get("name", ""), card.get("listName", "")
+    )
+    if name_warning:
+        print(f"  Warning [{card.get('listName', '')}/{card.get('name', '')}]: {name_warning}")
+
+    if name_date:
+        creation_date = name_date
+    else:
+        raw_creation_date = card.get("due") or card.get("dateLastActivity")
+        if not raw_creation_date:
+            raise ValueError(f"Card {card['name']!r} has no due date or dateLastActivity")
+        creation_date = parse_trello_date(raw_creation_date)
 
     raw_modified_date = card.get("dateLastActivity")
     if not raw_modified_date:
@@ -197,6 +259,28 @@ def validate_cards(cards: list) -> list[str]:
                 errors.append(f"[{label}] Bad modified date — {exc}")
 
     return errors
+
+
+def filter_empty_cards(cards: list) -> tuple[list, list]:
+    """
+    Separate cards into (keep, skip).
+
+    A card is skipped if it has no description, no comments, and no attachments.
+    Returns (cards_to_keep, cards_to_skip).
+    """
+    keep, skip = [], []
+    for card in cards:
+        has_desc = bool((card.get("desc") or "").strip())
+        has_comments = any(
+            a.get("type") == "commentCard"
+            for a in (card.get("actions") or [])
+        )
+        has_attachments = bool(card.get("attachments"))
+        if has_desc or has_comments or has_attachments:
+            keep.append(card)
+        else:
+            skip.append(card)
+    return keep, skip
 
 
 def transform_cards(
