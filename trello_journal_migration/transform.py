@@ -155,18 +155,9 @@ def collect_tags(card: dict) -> list:
     Gather tags from a Trello card.
     Uses the list name as the first tag, then each label name.
     """
-    tags = []
-
-    list_name = card.get("listName")
-    if list_name:
-        tags.append(list_name)
-
-    labels = card.get("labels") or []
-    for label in labels:
-        if label.get("name"):
-            tags.append(label["name"])
-
-    return tags
+    list_tag = [card["listName"]] if card.get("listName") else []
+    label_tags = [label["name"] for label in (card.get("labels") or []) if label.get("name")]
+    return list_tag + label_tags
 
 
 def card_to_entry(
@@ -205,12 +196,10 @@ def card_to_entry(
     modified_date = parse_trello_date(raw_modified_date)
 
     # Collect local paths of downloaded attachments (in order matching placeholders)
-    attachment_paths = []
-    if include_attachments:
-        for attachment in card.get("attachments") or []:
-            local_path = attachment.get("local_path")
-            if local_path:
-                attachment_paths.append(local_path)
+    attachment_paths = (
+        [a["local_path"] for a in (card.get("attachments") or []) if a.get("local_path")]
+        if include_attachments else []
+    )
 
     entry = create_entry(
         text=body,

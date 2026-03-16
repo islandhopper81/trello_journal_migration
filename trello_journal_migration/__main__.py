@@ -165,20 +165,18 @@ def main() -> None:
 
     # -- Dry run: just print a summary and exit --
     if args.dry_run:
+        def comment_count(card):
+            return sum(1 for a in (card.get("actions") or []) if a.get("type") == "commentCard")
+
         print("\n--- DRY RUN ---")
         print(f"Would create {len(entries)} Day One entries.")
         attachment_count = sum(len(e.get("attachment_paths", [])) for e in entries)
         print(f"Total attachments: {attachment_count}")
-        cards_with_comments = [
-            c for c in cards
-            if len([a for a in (c.get("actions") or []) if a.get("type") == "commentCard"]) > 0
-        ]
+        cards_with_comments = [c for c in cards if comment_count(c) > 0]
         print(f"Cards with comments: {len(cards_with_comments)}")
         for card in cards_with_comments:
-            comment_count = len([a for a in card["actions"] if a.get("type") == "commentCard"])
-            print(f"  [{card.get('listName', '')}] {card['name']} — {comment_count} comment(s)")
-        multi_comment_cards = [c for c in cards_with_comments if
-            len([a for a in c["actions"] if a.get("type") == "commentCard"]) > 1]
+            print(f"  [{card.get('listName', '')}] {card['name']} — {comment_count(card)} comment(s)")
+        multi_comment_cards = [c for c in cards_with_comments if comment_count(c) > 1]
         print(f"Cards with more than one comment: {len(multi_comment_cards)}")
         print(f"\nSkipped cards (no description, comments, or attachments):")
         for card in skipped_cards:

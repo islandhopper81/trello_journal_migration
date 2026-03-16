@@ -29,18 +29,20 @@ class TrelloClient:
         """Get board metadata (name, description, url)."""
         return self._get(f"/boards/{board_id}", {"fields": "name,desc,url"})
 
+    @staticmethod
+    def _card_filter(include_archived: bool) -> str:
+        return "all" if include_archived else "open"
+
     def get_lists(self, board_id: str, include_archived: bool = False) -> list:
         """Get all lists on a board."""
-        card_filter = "all" if include_archived else "open"
-        return self._get(f"/boards/{board_id}/lists", {"filter": card_filter})
+        return self._get(f"/boards/{board_id}/lists", {"filter": self._card_filter(include_archived)})
 
     def get_cards(self, list_id: str, include_archived: bool = False) -> list:
         """Get all cards in a list, including their attachments and labels."""
-        card_filter = "all" if include_archived else "open"
         return self._get(
             f"/lists/{list_id}/cards",
             {
-                "filter": card_filter,
+                "filter": self._card_filter(include_archived),
                 "fields": "name,desc,dateLastActivity,due,labels,closed",
                 "attachments": "true",
                 "attachment_fields": "name,url,mimeType,date",

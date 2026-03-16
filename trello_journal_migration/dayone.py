@@ -36,10 +36,10 @@ def create_entry(
 
     return {
         "uuid": uuid.uuid4().hex.upper(),
-        "creationDate": creation_date if creation_date else right_now,
-        "modifiedDate": modified_date if modified_date else right_now,
+        "creationDate": creation_date or right_now,
+        "modifiedDate": modified_date or right_now,
         "text": text,
-        "tags": tags if tags else [],
+        "tags": tags or [],
         "starred": starred,
         "journal": journal,
     }
@@ -71,12 +71,10 @@ def build_dayone_json(entries: list) -> dict:
     aren't part of the Day One JSON spec.
     """
     internal_keys = {"attachment_paths", "attachment_photos"}
-
-    cleaned_entries = []
-    for entry in entries:
-        clean = {k: v for k, v in entry.items() if k not in internal_keys}
-        cleaned_entries.append(clean)
-
+    cleaned_entries = [
+        {k: v for k, v in entry.items() if k not in internal_keys}
+        for entry in entries
+    ]
     return {
         "metadata": {"version": "1.0"},
         "entries": cleaned_entries,
